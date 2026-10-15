@@ -1,22 +1,14 @@
 #!/usr/bin/env python3
 
 """
-Isaac Sim - Dual Pendulum Dataset Generator
--------------------------------------------
+Principia-Synth: Pendulum scenario.
 
-Creates:
-- two ceiling anchors
-- two pendulum spheres (same colour)
-- two distance joint constraints
-- randomized pendulum lengths
-- randomized sphere sizes
-- opposite randomized initial angles
-- path-traced rendering (fully accumulated per frame)
-- clean 1280x720 frame saving via a Replicator render product (no viewport UI)
-- multiple samples
+Two pendulums of different lengths are released from the same angle.
 
-Run:
-./python.sh render_pendulum_isaac.py --headless [--num_samples 100] [--output_dir /mnt/data/varun/Self-Refinement-Training/Pendulum]
+Usage (from the Isaac Sim install folder):
+    ./python.sh /path/to/Principia-Synth/scenarios/render_pendulum.py --headless [--num_samples N]
+
+Run with --help to list all options.
 """
 
 import os
@@ -34,16 +26,18 @@ import numpy as np
 
 from isaacsim import SimulationApp
 
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 parser = argparse.ArgumentParser()
-parser.add_argument("--headless", action="store_true")
-parser.add_argument("--num_samples", type=int, default=100)
-parser.add_argument("--output_dir", type=str, default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "Pendulum"))
-parser.add_argument("--seed", type=int, default=None)
-parser.add_argument("--fps", type=int, default=24)
-parser.add_argument("--duration", type=float, default=5.0)
-parser.add_argument("--width", type=int, default=1280)
-parser.add_argument("--height", type=int, default=720)
-parser.add_argument("--spp", type=int, default=64)
+parser.add_argument("--headless", action="store_true", help="run without the Isaac Sim GUI")
+parser.add_argument("--num_samples", type=int, default=100, help="number of videos to generate (default: %(default)s)")
+parser.add_argument("--output_dir", type=str, default=os.path.join(REPO_ROOT, "output", "Pendulum"), help="folder the sample_N folders are written to (default: %(default)s)")
+parser.add_argument("--seed", type=int, default=None, help="random seed for reproducible parameters and colours (default: random)")
+parser.add_argument("--fps", type=int, default=24, help="video frame rate (default: %(default)s)")
+parser.add_argument("--duration", type=float, default=5.0, help="video length in seconds (default: %(default)s)")
+parser.add_argument("--width", type=int, default=1280, help="frame width in pixels (default: %(default)s)")
+parser.add_argument("--height", type=int, default=720, help="frame height in pixels (default: %(default)s)")
+parser.add_argument("--spp", type=int, default=64, help="path-tracing samples per pixel; use a multiple of 16 (default: %(default)s)")
 ARGS, _ = parser.parse_known_args()
 
 if ARGS.seed is not None:
@@ -142,8 +136,7 @@ stage = omni.usd.get_context().get_stage()
 
 # ============================================================
 # COLORS
-# Extended palette (same style as scripts/colours_palette.json, more colours)
-PALETTE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "colours_palette.json")
+PALETTE_PATH = os.path.join(REPO_ROOT, "assets", "colours_palette.json")
 colors_palette = json.load(open(PALETTE_PATH, "r"))
 bg_colors = []
 

@@ -15,26 +15,26 @@ set -uo pipefail
 # which usually matches nvidia-smi but not necessarily CUDA's order. The log's
 # GPU table marks the active device.
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Isaac Sim's python.sh, or `python` from an environment with the isaacsim pip package
 ISAAC_PYTHON="${ISAAC_PYTHON:-python.sh}"
-OUTPUT_ROOT="${OUTPUT_ROOT:-$SCRIPT_DIR/output}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-$REPO_ROOT/output}"
 LOG_DIR="${LOG_DIR:-$OUTPUT_ROOT/logs}"
 
 RENDER_GPUS=(${RENDER_GPUS:-0 1})
 NUM_SAMPLES="${NUM_SAMPLES:-100}"
 EXTRA_ARGS=(${EXTRA_ARGS:-})
 
-SCENARIOS=(${SCENARIOS:-coeff_friction com moi pendulum projectile resti spring})
+SCENARIOS=(${SCENARIOS:-friction com moi pendulum projectile restitution spring})
 
 declare -A OUT_NAMES=(
-    [coeff_friction]=Friction
+    [friction]=Friction
     [com]=COM
     [moi]=MOI
     [pendulum]=Pendulum
     [projectile]=Projectile
-    [resti]=Restitution
+    [restitution]=Restitution
     [spring]=Spring
 )
 
@@ -56,7 +56,7 @@ for i in "${!SCENARIOS[@]}"; do
     gpu="${RENDER_GPUS[$(( i % ${#RENDER_GPUS[@]} ))]}"
     log="$LOG_DIR/render_${s}.log"
 
-    "$ISAAC_PYTHON" "$SCRIPT_DIR/render_${s}_isaac.py" --headless \
+    "$ISAAC_PYTHON" "$REPO_ROOT/scenarios/render_${s}.py" --headless \
         --num_samples "$NUM_SAMPLES" \
         --output_dir "$OUTPUT_ROOT/${OUT_NAMES[$s]}" \
         "${EXTRA_ARGS[@]}" \

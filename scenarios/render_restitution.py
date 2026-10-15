@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 
 """
-Isaac Sim - Stable Bouncing Spheres
------------------------------------
+Principia-Synth: Restitution scenario.
 
-Key Fix:
-- Entire scene recreated every sample
-- Prevents stale PhysX state
-- Reliable restitution / bouncing
+Two identical spheres are dropped from different heights and bounce on the ground.
 
-Run:
-./python.sh bouncing_spheres.py --headless
+Usage (from the Isaac Sim install folder):
+    ./python.sh /path/to/Principia-Synth/scenarios/render_restitution.py --headless [--num_samples N]
+
+Run with --help to list all options.
 """
 
 import os
@@ -27,16 +25,18 @@ import numpy as np
 
 from isaacsim import SimulationApp
 
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 parser = argparse.ArgumentParser()
-parser.add_argument("--headless", action="store_true")
-parser.add_argument("--num_samples", type=int, default=100)
-parser.add_argument("--output_dir", type=str, default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "Restitution"))
-parser.add_argument("--seed", type=int, default=None)
-parser.add_argument("--fps", type=int, default=24)
-parser.add_argument("--duration", type=float, default=5.0)
-parser.add_argument("--width", type=int, default=1280)
-parser.add_argument("--height", type=int, default=720)
-parser.add_argument("--spp", type=int, default=64)
+parser.add_argument("--headless", action="store_true", help="run without the Isaac Sim GUI")
+parser.add_argument("--num_samples", type=int, default=100, help="number of videos to generate (default: %(default)s)")
+parser.add_argument("--output_dir", type=str, default=os.path.join(REPO_ROOT, "output", "Restitution"), help="folder the sample_N folders are written to (default: %(default)s)")
+parser.add_argument("--seed", type=int, default=None, help="random seed for reproducible parameters and colours (default: random)")
+parser.add_argument("--fps", type=int, default=24, help="video frame rate (default: %(default)s)")
+parser.add_argument("--duration", type=float, default=5.0, help="video length in seconds (default: %(default)s)")
+parser.add_argument("--width", type=int, default=1280, help="frame width in pixels (default: %(default)s)")
+parser.add_argument("--height", type=int, default=720, help="frame height in pixels (default: %(default)s)")
+parser.add_argument("--spp", type=int, default=64, help="path-tracing samples per pixel; use a multiple of 16 (default: %(default)s)")
 ARGS, _ = parser.parse_known_args()
 
 if ARGS.seed is not None:
@@ -154,7 +154,7 @@ stage = omni.usd.get_context().get_stage()
 # COLORS
 # ============================================================
 import json
-colors_palette = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "colours_palette.json"), "r"))
+colors_palette = json.load(open(os.path.join(REPO_ROOT, "assets", "colours_palette.json"), "r"))
 bg_colors = []
 
 for color_name, color_data in colors_palette["reference_palette"].items():

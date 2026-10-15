@@ -5,26 +5,31 @@ compares two objects side by side and randomizes the scene for every sample.
 
 | Scenario | Script | What it shows |
 |---|---|---|
-| Friction | `render_coeff_friction_isaac.py` | Two blocks of different sizes sliding down mirrored inclines |
-| COM | `render_com_isaac.py` | Two spheres roll down mirrored inclines and hit blocks on the ground |
-| MOI | `render_moi_isaac.py` | A hollow and a solid cylinder rolling down mirrored inclines |
-| Pendulum | `render_pendulum_isaac.py` | Two pendulums of different lengths released from the same angle |
-| Projectile | `render_projectile_isaac.py` | Two spheres launched off mirrored ramps on top of a box |
-| Restitution | `render_resti_isaac.py` | Two spheres dropped from different heights, bouncing |
-| Spring | `render_spring_isaac.py` | Two blocks of different mass on springs of equal stiffness |
+| Friction | `scenarios/render_friction.py` | Two blocks of different sizes sliding down mirrored inclines |
+| COM | `scenarios/render_com.py` | Two spheres roll down mirrored inclines and hit blocks on the ground |
+| MOI | `scenarios/render_moi.py` | A hollow and a solid cylinder rolling down mirrored inclines |
+| Pendulum | `scenarios/render_pendulum.py` | Two pendulums of different lengths released from the same angle |
+| Projectile | `scenarios/render_projectile.py` | Two spheres launched off mirrored ramps on top of a box |
+| Restitution | `scenarios/render_restitution.py` | Two spheres dropped from different heights, bouncing |
+| Spring | `scenarios/render_spring.py` | Two blocks of different mass on springs of equal stiffness |
 
-## Requirements
+## Repository layout
 
-- Linux with an NVIDIA RTX GPU
-- NVIDIA Isaac Sim 5.1
-- `ffmpeg` with `libx264` on `PATH`
+```
+Principia-Synth/
+├── run_all_renders.sh   # render several scenarios in parallel
+├── scenarios/           # one render script per scenario
+└── assets/
+    ├── colours_palette.json
+    └── models/          # cylinder meshes used by MOI
+```
 
 ## Run one scenario
 
 From the Isaac Sim install folder:
 
 ```bash
-./python.sh /path/to/Principia-Synth/render_<scenario>_isaac.py --headless --num_samples 10
+./python.sh /path/to/Principia-Synth/scenarios/render_<scenario>.py --headless --num_samples 10
 ```
 
 | Flag | Default | Description |
@@ -47,7 +52,7 @@ Optional environment variables:
 
 | Variable | Default | Description |
 |---|---|---|
-| `SCENARIOS` | all seven | Any of `coeff_friction com moi pendulum projectile resti spring` |
+| `SCENARIOS` | all seven | Any of `friction com moi pendulum projectile restitution spring` |
 | `RENDER_GPUS` | `"0 1"` | GPUs to spread scenarios across |
 | `OUTPUT_ROOT` | `Principia-Synth/output` | Parent output folder |
 | `EXTRA_ARGS` | none | Flags passed to every script, e.g. `"--seed 0 --duration 3"` |

@@ -1,20 +1,14 @@
 #!/usr/bin/env python3
 
 """
-Isaac Sim - Dual Spring Mass Dataset Renderer
----------------------------------------------
+Principia-Synth: Spring scenario.
 
-Features:
-- Two independent spring-mass systems
-- Different block masses/sizes
-- Same spring stiffness
-- Procedural visual helix springs
-- Stable RTX rendering
-- Multiple randomized samples
-- Metadata saving
+Two blocks of different mass oscillate on springs of equal stiffness.
 
-Run:
-./python.sh render_dual_springs.py --headless
+Usage (from the Isaac Sim install folder):
+    ./python.sh /path/to/Principia-Synth/scenarios/render_spring.py --headless [--num_samples N]
+
+Run with --help to list all options.
 """
 
 # ============================================================
@@ -35,16 +29,18 @@ from isaacsim import SimulationApp
 # SimulationApp MUST COME FIRST
 # ============================================================
 
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 parser = argparse.ArgumentParser()
-parser.add_argument("--headless", action="store_true")
-parser.add_argument("--num_samples", type=int, default=100)
-parser.add_argument("--output_dir", type=str, default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "Spring"))
-parser.add_argument("--seed", type=int, default=None)
-parser.add_argument("--fps", type=int, default=24)
-parser.add_argument("--duration", type=float, default=5.0)
-parser.add_argument("--width", type=int, default=1280)
-parser.add_argument("--height", type=int, default=720)
-parser.add_argument("--spp", type=int, default=64)
+parser.add_argument("--headless", action="store_true", help="run without the Isaac Sim GUI")
+parser.add_argument("--num_samples", type=int, default=100, help="number of videos to generate (default: %(default)s)")
+parser.add_argument("--output_dir", type=str, default=os.path.join(REPO_ROOT, "output", "Spring"), help="folder the sample_N folders are written to (default: %(default)s)")
+parser.add_argument("--seed", type=int, default=None, help="random seed for reproducible parameters and colours (default: random)")
+parser.add_argument("--fps", type=int, default=24, help="video frame rate (default: %(default)s)")
+parser.add_argument("--duration", type=float, default=5.0, help="video length in seconds (default: %(default)s)")
+parser.add_argument("--width", type=int, default=1280, help="frame width in pixels (default: %(default)s)")
+parser.add_argument("--height", type=int, default=720, help="frame height in pixels (default: %(default)s)")
+parser.add_argument("--spp", type=int, default=64, help="path-tracing samples per pixel; use a multiple of 16 (default: %(default)s)")
 ARGS, _ = parser.parse_known_args()
 
 if ARGS.seed is not None:
@@ -147,7 +143,7 @@ from omni.isaac.core.materials import OmniPBR
 
 colors_palette = json.load(
     open(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "colours_palette.json"),
+        os.path.join(REPO_ROOT, "assets", "colours_palette.json"),
         "r",
     )
 )

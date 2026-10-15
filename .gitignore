@@ -1,0 +1,6 @@
+# Rendered samples and logs
+output/
+
+# Python
+__pycache__/
+*.pyc

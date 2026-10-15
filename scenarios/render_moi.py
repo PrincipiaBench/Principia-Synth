@@ -1,20 +1,12 @@
-#!/usr/bin/env python3
-
 """
-Isaac Sim version of mirrored incline sphere dataset
-----------------------------------------------------
+Principia-Synth: MOI scenario.
 
-Features:
-- RTX Path Tracing
-- Cinematic lighting
-- Physics-stable rolling spheres
-- Randomized scene generation
-- Frame rendering + mp4 export
-- Semantic segmentation masks
-- Metadata export
+A hollow and a solid cylinder of equal mass and size roll down mirrored inclines.
 
-Run:
-./python.sh render_projectile_isaac.py --headless
+Usage (from the Isaac Sim install folder):
+    ./python.sh /path/to/Principia-Synth/scenarios/render_moi.py --headless [--num_samples N]
+
+Run with --help to list all options.
 """
 
 import os
@@ -26,21 +18,23 @@ import subprocess
 import numpy as np
 
 # ============================================================
-# MUST COME FIRST
+# SimulationApp MUST come first
 # ============================================================
 
 from isaacsim import SimulationApp
 
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 parser = argparse.ArgumentParser()
-parser.add_argument("--headless", action="store_true")
-parser.add_argument("--num_samples", type=int, default=100)
-parser.add_argument("--output_dir", type=str, default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "Projectile"))
-parser.add_argument("--seed", type=int, default=None)
-parser.add_argument("--fps", type=int, default=24)
-parser.add_argument("--duration", type=float, default=5.0)
-parser.add_argument("--width", type=int, default=1280)
-parser.add_argument("--height", type=int, default=720)
-parser.add_argument("--spp", type=int, default=64)
+parser.add_argument("--headless", action="store_true", help="run without the Isaac Sim GUI")
+parser.add_argument("--num_samples", type=int, default=100, help="number of videos to generate (default: %(default)s)")
+parser.add_argument("--output_dir", type=str, default=os.path.join(REPO_ROOT, "output", "MOI"), help="folder the sample_N folders are written to (default: %(default)s)")
+parser.add_argument("--seed", type=int, default=None, help="random seed for reproducible parameters and colours (default: random)")
+parser.add_argument("--fps", type=int, default=24, help="video frame rate (default: %(default)s)")
+parser.add_argument("--duration", type=float, default=5.0, help="video length in seconds (default: %(default)s)")
+parser.add_argument("--width", type=int, default=1280, help="frame width in pixels (default: %(default)s)")
+parser.add_argument("--height", type=int, default=720, help="frame height in pixels (default: %(default)s)")
+parser.add_argument("--spp", type=int, default=64, help="path-tracing samples per pixel; use a multiple of 16 (default: %(default)s)")
 ARGS, _ = parser.parse_known_args()
 
 if ARGS.seed is not None:
@@ -75,26 +69,28 @@ from pxr import (
     UsdGeom,
     Gf,
     UsdLux,
-    UsdShade,
+    UsdPhysics,
+    PhysxSchema,
 )
-from omni.isaac.dynamic_control import _dynamic_control
 
 from isaacsim.core.api import SimulationContext
-from isaacsim.core.api.objects import (
-    DynamicCuboid,
-    FixedCuboid,
-    DynamicSphere,
+from isaacsim.core.api.objects import FixedCuboid
+from isaacsim.core.api.objects.ground_plane import GroundPlane
+from isaacsim.core.api.materials.physics_material import (
+    PhysicsMaterial,
 )
 
-from isaacsim.core.api.objects.ground_plane import GroundPlane
-from isaacsim.core.api.materials.physics_material import PhysicsMaterial
+from isaacsim.core.prims import XFormPrim
 
 import omni.kit.viewport.utility as vp_utils
 import omni.replicator.core as rep
 from PIL import Image
 
 from omni.isaac.core.materials import OmniPBR
-
+from pxr import Gf, UsdGeom
+from pxr import Sdf
+from omni.isaac.core.prims import RigidPrim
+from omni.isaac.dynamic_control import _dynamic_control
 # ============================================================
 # RTX SETTINGS
 # ============================================================
@@ -102,6 +98,7 @@ from omni.isaac.core.materials import OmniPBR
 settings = carb.settings.get_settings()
 
 settings.set("/rtx/rendermode", "PathTracing")
+
 # Full accumulation per frame: each frame renders RT_SUBFRAMES subframes of
 # SPP_PER_SUBFRAME samples with the timeline held, reaching TOTAL_SPP.
 TOTAL_SPP = ARGS.spp
@@ -130,15 +127,19 @@ settings.set("/rtx/shadows/enabled", True)
 
 FPS = ARGS.fps
 DURATION = ARGS.duration
+
 TOTAL_FRAMES = int(FPS * DURATION)
 
 OUTPUT_DIR = ARGS.output_dir
+
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ============================================================
-# COLORS
+# Colors
+# ============================================================
+
 import json
-colors_palette = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "colours_palette.json"), "r"))
+colors_palette = json.load(open(os.path.join(REPO_ROOT, "assets", "colours_palette.json"), "r"))
 bg_colors = []
 
 for color_name, color_data in colors_palette["reference_palette"].items():
@@ -170,7 +171,12 @@ wood_material.set_metallic_constant(0.0)
 # Simulation
 # ============================================================
 
-simulation_context = SimulationContext(stage_units_in_meters=1.0, physics_dt=1.0 / FPS, rendering_dt=1.0 / FPS)
+simulation_context = SimulationContext(
+    stage_units_in_meters=1.0,
+    physics_dt=1.0 / (FPS*10),
+    rendering_dt=1.0 / FPS,
+)
+
 stage = omni.usd.get_context().get_stage()
 
 # ============================================================
@@ -182,7 +188,7 @@ camera_path = "/World/MainCamera"
 camera = UsdGeom.Camera.Define(stage, camera_path)
 camera.ClearXformOpOrder()
 
-camera_pos = (0.0, -30, 8.0)
+camera_pos = (0.0, -25, 7.0)
 camera_rot = (80.0, 0.0, 0.0)
 
 camera.AddTranslateOp().Set(Gf.Vec3f(*camera_pos))
@@ -287,9 +293,9 @@ color=COLOR_BG,
 # Scene Constants
 # ============================================================
 
-half_len = 1.0
+half_len = 3.0
 plane_thick = 0.06
-plane_width = 0.65
+plane_width = 1.0
 
 # ============================================================
 # Shared Objects
@@ -298,14 +304,8 @@ plane_width = 0.65
 right_plane = None
 left_plane = None
 
-right_sphere = None
-left_sphere = None
-
-middle_box = None
-
-
 # ============================================================
-# Create Initial Scene
+# Create Scene
 # ============================================================
 
 def create_scene():
@@ -337,24 +337,35 @@ def create_scene():
         ),
     )
 
+    right_plane.apply_visual_material(
+        wood_material
+    )
+
+    left_plane.apply_visual_material(
+        wood_material
+    )
+
+def compute_cylinder_inertia(mass, radius, height, is_hollow):
+
+    if is_hollow:
+        Ixx = 0.5 * mass * radius**2 + (1/12) * mass * height**2
+        Iyy = Ixx
+        Izz = mass * radius**2
+    else:
+        Ixx = 0.25 * mass * radius**2 + (1/12) * mass * height**2
+        Iyy = Ixx
+        Izz = 0.5 * mass * radius**2
+
+    return Ixx, Iyy, Izz
+
 # ============================================================
 # Configure Scene
 # ============================================================
 
-def configure_scene(
-    angle_deg,
-    sphere_radius,
-    friction_val,
-    sample_index,
-):
-
-    global right_sphere
-    global left_sphere
-    global middle_box
-    global sphere_handle
+def configure_scene(sample_index):
 
     COLOR_BG, COLOR_FLOOR = random.sample(bg_colors, 2)
-    COLOR_INCLINE, COLOR_SPHERE, COLOR_BOX = random.sample(all_colors, 3)
+    COLOR_INCLINE, COLOR_CYLINDER1, COLOR_CYLINDER2 = random.sample(all_colors, 3)
 
     ground_material.set_color(COLOR_FLOOR)
     ground.apply_visual_material(ground_material)
@@ -363,8 +374,36 @@ def configure_scene(
     wood_material.set_color(COLOR_INCLINE)
     left_plane.apply_visual_material(wood_material)
     right_plane.apply_visual_material(wood_material)
+    left_mat = OmniPBR(
+    prim_path="/World/Materials/LeftCylinderMat",
+    color=COLOR_CYLINDER1,)
+    right_mat = OmniPBR(
+        prim_path="/World/Materials/RightCylinderMat",
+        color=COLOR_CYLINDER2,
+    )
+
+    angle_deg = random.uniform(10, 30)
 
     angle_rad = np.radians(angle_deg)
+
+    # d_scale = random.uniform(0.30, 0.50)
+
+    # h_scale = (
+    #     random.uniform(1.0, 1.5)
+    #     * d_scale
+    # )
+
+    h_scale = d_scale = random.uniform(0.5, 1.0)
+
+    radius = 0.5 * d_scale
+
+    mass = random.uniform(5, 10)
+
+    friction = 1.0
+
+    # ========================================================
+    # Plane transforms
+    # ========================================================
 
     quat_right = np.array(
         [
@@ -384,39 +423,15 @@ def configure_scene(
         ]
     )
 
-    plane_x = half_len * np.cos(angle_rad)
+    plane_x = (
+        half_len
+        * np.cos(angle_rad)
+    )
 
     plane_z = (
         half_len * np.sin(angle_rad)
         + plane_thick * np.cos(angle_rad)
     )
-
-    # ========================================================
-    # Physics Material
-    # ========================================================
-
-    phys_mat = PhysicsMaterial(
-        prim_path=f"/World/PhysicsMaterial_{sample_index}",
-        static_friction=friction_val,
-        dynamic_friction=friction_val,
-        restitution=0.0,
-    )
-
-    # ========================================================
-    # Middle Box
-    # ========================================================
-
-    box_height = random.uniform(2.0, 4)
-
-    box_z = box_height / 2.0
-
-    plane_z = plane_z + box_height
-
-    box_width = 4 * plane_x
-
-    # ========================================================
-    # Plane Placement
-    # ========================================================
 
     right_plane.set_world_pose(
         position=np.array(
@@ -440,164 +455,295 @@ def configure_scene(
         orientation=quat_left,
     )
 
-    right_plane.apply_physics_material(phys_mat)
-    left_plane.apply_physics_material(phys_mat)
-
     # ========================================================
-    # Sphere placement
+    # Physics Material
     # ========================================================
 
-    pos1 = random.choice([0, 0.3, 0.6, 0.9])
-    pos2 = random.choice([0, 0.3, 0.6, 0.9])
+    mat_path = (
+        f"/World/PhysicsMaterial_{sample_index}"
+    )
 
-    dist1 = -pos1 * half_len
-    dist2 = -pos2 * half_len
+    phys_mat = PhysicsMaterial(
+        prim_path=mat_path,
+        static_friction=friction,
+        dynamic_friction=friction,
+        restitution=0.0,
+    )
+
+    right_plane.apply_physics_material(
+        phys_mat
+    )
+
+    left_plane.apply_physics_material(
+        phys_mat
+    )
+
+    # ========================================================
+    # Cylinder placement
+    # ========================================================
+
+    dist = -0.85 * half_len
 
     offset = (
         plane_thick
-        + sphere_radius
+        + radius
         + 0.002
     )
 
-    bx1 = (
+    bx = (
         plane_x
-        + dist1 * np.cos(angle_rad)
+        + dist * np.cos(angle_rad)
         + offset * np.sin(angle_rad)
     )
 
-    bz1 = (
+    bz = (
         plane_z
-        - dist1 * np.sin(angle_rad)
-        + offset * np.cos(angle_rad)
-    )
-
-    bx2 = (
-        plane_x
-        + dist2 * np.cos(angle_rad)
-        + offset * np.sin(angle_rad)
-    )
-
-    bz2 = (
-        plane_z
-        - dist2 * np.sin(angle_rad)
+        - dist * np.sin(angle_rad)
         + offset * np.cos(angle_rad)
     )
 
     # ========================================================
-    # Delete old objects
+    # Delete previous cylinders
     # ========================================================
 
-    delete_paths = [
-        "/World/right_sphere",
-        "/World/left_sphere",
-        "/World/middle_box",
-    ]
+    paths_to_delete = []
 
-    for path in delete_paths:
+    if stage.GetPrimAtPath(
+        "/World/right_cylinder"
+    ).IsValid():
 
-        if stage.GetPrimAtPath(path).IsValid():
+        paths_to_delete.append(
+            "/World/right_cylinder"
+        )
 
-            omni.kit.commands.execute(
-                "DeletePrims",
-                paths=[path],
-            )
+    if stage.GetPrimAtPath(
+        "/World/left_cylinder"
+    ).IsValid():
+
+        paths_to_delete.append(
+            "/World/left_cylinder"
+        )
+
+    if len(paths_to_delete) > 0:
+
+        omni.kit.commands.execute(
+            "DeletePrims",
+            paths=paths_to_delete,
+        )
 
     # ========================================================
-    # Random color
+    # Assets
     # ========================================================
 
-    sphere_color = np.array(COLOR_SPHERE)
-
-    # ========================================================
-    # Create spheres
-    # ========================================================
-    mass=random.uniform(0.1, 0.5)
-    print(f"Creating spheres with mass: {mass}")
-    right_sphere = DynamicSphere(
-        prim_path="/World/right_sphere",
-        position=np.array([bx1, 0, bz1]),
-        radius=sphere_radius,
-        color=sphere_color,
-        mass=mass,
+    ASSET_DIR = os.path.join(
+        REPO_ROOT,
+        "assets",
+        "models",
     )
 
-    left_sphere = DynamicSphere(
-        prim_path="/World/left_sphere",
-        position=np.array([-bx2, 0, bz2]),
-        radius=sphere_radius,
-        color=sphere_color,
-        mass=mass,
+    for asset_name in ("hollow_cylinder.usdc", "solid_cylinder.usdc"):
+        if not os.path.exists(os.path.join(ASSET_DIR, asset_name)):
+            # Fail loudly: a missing reference renders an empty scene without error
+            raise FileNotFoundError(os.path.join(ASSET_DIR, asset_name))
+
+    hollow_asset = os.path.join(
+        ASSET_DIR,
+        "hollow_cylinder.usdc",
     )
 
-    if bz1 >= bz2:
-        sphere_handle = right_sphere
+    solid_asset = os.path.join(
+        ASSET_DIR,
+        "solid_cylinder.usdc",
+    )
+
+    print("HOLLOW ASSET:", hollow_asset)
+    print("SOLID ASSET :", solid_asset)
+
+    hollow_is_left = random.choice(
+        [True, False]
+    )
+
+    if hollow_is_left:
+
+        left_asset = hollow_asset
+        right_asset = solid_asset
+
     else:
-        sphere_handle = left_sphere
+
+        left_asset = solid_asset
+        right_asset = hollow_asset
 
     # ========================================================
-    # Create middle box
+    # LEFT CYLINDER
     # ========================================================
 
-    middle_box = FixedCuboid(
-        prim_path="/World/middle_box",
-        position=np.array(
-            [
-                0,
-                0,
-                box_z,
-            ]
-        ),
-        scale=np.array(
-            [
-                box_width,
-                box_width,
-                box_height,
-            ]
-        ),
-        color=np.array(COLOR_BOX),
+    left_path = "/World/left_cylinder"
+
+    left_prim = stage.DefinePrim(
+        left_path,
+        "Xform",
+    )
+
+    left_prim.GetReferences().AddReference(
+        left_asset
+    )
+
+    left_xform = UsdGeom.Xformable(left_prim)
+
+    left_xform.ClearXformOpOrder()
+
+    left_xform.AddTranslateOp(
+        precision=UsdGeom.XformOp.PrecisionDouble
+    ).Set(
+        Gf.Vec3d(
+            -bx,
+            0.0,
+            bz,
+        )
+    )
+
+    rot_y = Gf.Rotation(Gf.Vec3d(0, 1, 0), 90)
+    rot_z = Gf.Rotation(Gf.Vec3d(0, 0, 1), 90)
+    rot_x = Gf.Rotation(Gf.Vec3d(1, 0, 0), 90)
+
+    rot_0 = Gf.Rotation(Gf.Vec3d(0, 0, 1), 0)
+
+    combined = rot_y*rot_z   # order matters!
+
+    left_xform.AddOrientOp(
+        precision=UsdGeom.XformOp.PrecisionDouble
+    ).Set(
+        combined.GetQuat()
+    )
+
+    left_xform.AddScaleOp(
+        precision=UsdGeom.XformOp.PrecisionDouble
+    ).Set(
+        Gf.Vec3d(
+            h_scale,
+            h_scale,
+            h_scale,
+        )
     )
 
     # ========================================================
-    # Physics materials
+    # RIGHT CYLINDER
     # ========================================================
 
-    right_sphere.apply_physics_material(
-        phys_mat
+
+    right_path = "/World/right_cylinder"
+
+    right_prim = stage.DefinePrim(
+        right_path,
+        "Xform",
     )
 
-    left_sphere.apply_physics_material(
-        phys_mat
+    right_prim.GetReferences().AddReference(
+        right_asset
+    )
+
+    right_xform = UsdGeom.Xformable(right_prim)
+
+    right_xform.ClearXformOpOrder()
+
+    right_xform.AddTranslateOp(
+        precision=UsdGeom.XformOp.PrecisionDouble
+    ).Set(
+        Gf.Vec3d(
+            bx,
+            0.0,
+            bz,
+        )
+    )
+
+    
+
+    
+
+    right_xform.AddOrientOp(
+        precision=UsdGeom.XformOp.PrecisionDouble
+    ).Set(
+        combined.GetQuat()
+    )
+
+    right_xform.AddScaleOp(
+        precision=UsdGeom.XformOp.PrecisionDouble
+    ).Set(
+        Gf.Vec3d(
+            h_scale,
+            h_scale,
+            h_scale,
+        )
+    )
+
+    omni.kit.commands.execute(
+    "BindMaterialCommand",
+    prim_path="/World/left_cylinder",
+    material_path=left_mat.prim_path,)
+
+    omni.kit.commands.execute(
+        "BindMaterialCommand",
+        prim_path="/World/right_cylinder",
+        material_path=right_mat.prim_path,
     )
 
     # ========================================================
-    # Reset velocities
+    # Physics
     # ========================================================
 
-    right_sphere.set_linear_velocity(
-        np.zeros(3)
-    )
+    for path, is_hollow in [
+    ("/World/left_cylinder", hollow_is_left),
+    ("/World/right_cylinder", not hollow_is_left),
+]:
 
-    right_sphere.set_angular_velocity(
-        np.zeros(3)
-    )
+        prim = stage.GetPrimAtPath(path)
 
-    left_sphere.set_linear_velocity(
-        np.zeros(3)
-    )
+        UsdPhysics.RigidBodyAPI.Apply(prim)
+        UsdPhysics.CollisionAPI.Apply(prim)
 
-    left_sphere.set_angular_velocity(
-        np.zeros(3)
-    )
+        prim.CreateAttribute(
+    "physics:approximation",
+    Sdf.ValueTypeNames.Token
+).Set("convexHull")
+
+
+        mass_api = UsdPhysics.MassAPI.Apply(prim)
+
+        mass_api.CreateMassAttr(mass)
+
+        height = h_scale
+
+        Ixx, Iyy, Izz = compute_cylinder_inertia(
+            mass=mass,
+            radius=radius,
+            height=height,
+            is_hollow=is_hollow,
+        )
+
+        print(path, Ixx, Iyy, Izz)
+
+        mass_api.CreateDiagonalInertiaAttr(
+            Gf.Vec3f(Ixx, Izz, Iyy)
+        )
+
+        mass_api.CreateCenterOfMassAttr(
+            Gf.Vec3f(0, 0, 0)
+        )
+
+        # optional but recommended (identity principal axes)
+        # prim.CreateAttribute("physx:principalAxes", Sdf.ValueTypeNames.Quatf).Set(Gf.Quatf(1, 0, 0, 0))
+
+        # # ALSO force PhysX to respect custom inertia
+        # mass_api = UsdPhysics.MassAPI.Apply(prim)
+        # mass_api.CreateCenterOfMassAttr(Gf.Vec3f(0, 0, 0))
 
     metadata = {
         "resolution": list(RESOLUTION),
         "angle_deg": angle_deg,
-        "sphere_radius": sphere_radius,
-        "friction_val": friction_val,
-        "pos1": pos1,
-        "pos2": pos2,
-        "box_height": box_height,
-        "camera_position": camera_pos,
+        "mass": mass,
+        "radius": radius,
+        "height_scale": h_scale,
+        "hollow_is_left": hollow_is_left,
         "fps": FPS,
         "duration": DURATION,
     }
@@ -608,44 +754,70 @@ def configure_scene(
 # Rendering
 # ============================================================
 
-def render_sample(sample_index):
+def render_sample(sample_index, dc):
+
+    left_rb = RigidPrim("/World/left_cylinder")
+    right_rb = RigidPrim("/World/right_cylinder")
 
     sample_dir = os.path.join(
         OUTPUT_DIR,
-        f"sample_{sample_index}"
+        f"sample_{sample_index}",
     )
 
     os.makedirs(sample_dir, exist_ok=True)
 
-    # warmup
+    print("Warmup...")
+
     # Render-only passes (no physics) so materials are loaded; frame 0 is
     # then the release pose with every object at rest
     for _ in range(3):
         capture_frame()
 
+    print("Rendering...")
+
     for frame in range(TOTAL_FRAMES):
+
+        left_w = left_rb.get_angular_velocity()
+        right_w = right_rb.get_angular_velocity()
+
+        print("LEFT :", left_w)
+        print("RIGHT:", right_w)
 
         frame_path = os.path.join(
             sample_dir,
-            f"frame_{frame:04d}.png"
+            f"frame_{frame:04d}.png",
         )
 
         Image.fromarray(capture_frame()).save(frame_path)
 
         step_physics()
 
+    # Queried after the physics has stepped, so PhysX has created the bodies
+    left_handle = dc.get_rigid_body("/World/left_cylinder")
+    right_handle = dc.get_rigid_body("/World/right_cylinder")
+
+    left_props = dc.get_rigid_body_properties(left_handle)
+    right_props = dc.get_rigid_body_properties(right_handle)
+
+    print("\nLEFT CYLINDER")
+    print("Mass:", left_props.mass)
+    print("Inertia:", left_props.moment)
+
+    print("\nRIGHT CYLINDER")
+    print("Mass:", right_props.mass)
+    print("Inertia:", right_props.moment)
 
     return sample_dir
 
 # ============================================================
-# Video Creation
+# Video
 # ============================================================
 
 def create_video(sample_dir):
 
     video_path = os.path.join(
         sample_dir,
-        "video.mp4"
+        "video.mp4",
     )
 
     ffmpeg_cmd = [
@@ -656,7 +828,7 @@ def create_video(sample_dir):
         "-i",
         os.path.join(
             sample_dir,
-            "frame_%04d.png"
+            "frame_%04d.png",
         ),
         "-c:v",
         "libx264",
@@ -684,33 +856,19 @@ def main():
 
     simulation_context.initialize_physics()
 
-    
+    dc = _dynamic_control.acquire_dynamic_control_interface()
 
     num_samples = ARGS.num_samples
 
     for i in range(1, num_samples + 1):
 
-        carb.log_info(
-            f"Running sample {i}"
-        )
+        print(f"\nRunning sample {i}")
 
-        friction_val = 0.0
-
-        sphere_radius = random.uniform(
-            0.10,
-            0.20,
-        )
-        angle_deg = random.uniform(15.0, 35.0)
         simulation_context.reset()
 
-        metadata = configure_scene(
-            angle_deg=angle_deg,
-            sphere_radius=sphere_radius,
-            friction_val=friction_val,
-            sample_index=i,
-        )
+        metadata = configure_scene(i)
 
-        sample_dir = render_sample(i)
+        sample_dir = render_sample(i, dc)
 
         create_video(sample_dir)
 
@@ -733,7 +891,7 @@ def main():
     simulation_app.close()
 
 # ============================================================
-# Entry
+# ENTRY
 # ============================================================
 
 if __name__ == "__main__":
